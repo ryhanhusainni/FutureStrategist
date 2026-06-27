@@ -21,14 +21,23 @@
     --high:#D14D3F;
     --high-dim:#4A2620;
 
+    /* Vibrant ambient tones for the page background wash — bolder
+       than the badge/gauge colors above so the risk level reads at
+       a glance, even from across a room. */
+    --ambient-low:#0F8A52;
+    --ambient-mod:#D97706;
+    --ambient-high:#C42B1C;
+
     --status-color: var(--paper-dim);
     --status-dim: var(--bg-raised);
+    --status-ambient: var(--bg);
   }
 
   *{ box-sizing:border-box; }
   html,body{
     margin:0; padding:0;
-    background:var(--bg);
+    transition: background 1s ease;
+    background: radial-gradient(ellipse 140% 90% at 50% 0%, var(--status-ambient) 0%, var(--bg) 70%);
     color:var(--paper);
     font-family:'Inter',sans-serif;
     min-height:100vh;
@@ -304,6 +313,15 @@
     opacity:0.7;
   }
 
+  .app-credit{
+    font-size:10px;
+    color:var(--paper-dim);
+    text-align:center;
+    margin-top:16px;
+    letter-spacing:0.04em;
+    opacity:0.45;
+  }
+
   .state-panel{
     flex:1;
     display:flex;
@@ -438,6 +456,7 @@
       <div class="fineprint" id="disclaimer">
         WBGT readings from NEA via data.gov.sg. Work/rest and hydration guidance adapted from SportSG's <em>Heat Stress Management Plan</em> (SHW/02/2023, rev. 24 Apr 2024). This is general guidance, not medical advice — stop and cool down if you feel unwell regardless of the reading.
       </div>
+      <div class="app-credit">Made by Raihan Husainni · Version 1.0</div>
     </div>
 
   </div>
@@ -450,13 +469,11 @@
   // ---------------------------------------------------------------
   // CONFIG
   // ---------------------------------------------------------------
-  var WBGT_API = "https://wbgt-proxy.ryhanhusainni.workers.dev";
-  // ^ Replace with your actual Cloudflare Worker URL after deploying
-  //   wbgt-proxy-worker.js (see setup instructions in that file).
-  //   Calling NEA's API directly from the browser no longer works
-  //   reliably now that it requires an API key — browsers can't send
-  //   that key without triggering a CORS preflight NEA doesn't support,
-  //   so this proxy holds the key server-side instead.
+  var WBGT_API = "https://wbgt-proxy.ryhanhusainni.workers.dev/";
+  // ^ Cloudflare Worker proxy — holds the data.gov.sg API key
+  //   server-side and forwards requests to NEA's real-time WBGT
+  //   endpoint. See wbgt-proxy-worker.js for the proxy's own source
+  //   and setup notes if it ever needs to be redeployed.
   var REFRESH_MS = 15 * 60 * 1000; // matches NEA's own 15-min update cadence
 
   // Thresholds (°C WBGT) per Singapore's official sporting-context
@@ -537,12 +554,6 @@
   }
 
   function fetchWBGT(){
-    if(WBGT_API.indexOf("YOUR-SUBDOMAIN") > -1){
-      return Promise.reject(new Error(
-        "The app isn't pointed at your proxy yet. Deploy wbgt-proxy-worker.js to Cloudflare Workers, then replace WBGT_API in this file with your real Worker URL."
-      ));
-    }
-
     return fetch(WBGT_API)
       .then(function(res){
         if(!res.ok){
@@ -677,6 +688,7 @@
   function applyStatus(level){
     document.documentElement.style.setProperty('--status-color', 'var(--' + level + ')');
     document.documentElement.style.setProperty('--status-dim', 'var(--' + level + '-dim)');
+    document.documentElement.style.setProperty('--status-ambient', 'var(--ambient-' + level + ')');
     [els["lbl-low"], els["lbl-mod"], els["lbl-high"]].forEach(function(el){ el.classList.remove("active"); });
     if(level === "low") els["lbl-low"].classList.add("active");
     if(level === "mod") els["lbl-mod"].classList.add("active");
