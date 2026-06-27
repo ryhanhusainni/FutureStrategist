@@ -364,15 +364,6 @@
     <h2 id="error-title">Couldn't get a reading</h2>
     <p id="error-text">Something went wrong.</p>
     <button class="btn" id="btn-retry">Try again</button>
-    <button class="btn btn-ghost" id="btn-show-settings">Add an API key</button>
-    <div class="hidden" id="settings-box" style="margin-top:18px; width:100%; max-width:320px;">
-      <input type="text" id="api-key-input" placeholder="Paste your data.gov.sg API key"
-        style="width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line); background:var(--bg-raised); color:var(--paper); font-size:13px;">
-      <button class="btn" id="btn-save-key" style="margin-top:10px;">Save key &amp; retry</button>
-      <div class="fineprint">
-        Free to get at data.gov.sg (log in → API keys). Stored only in this browser, never sent anywhere except NEA's API.
-      </div>
-    </div>
   </div>
 
   <!-- ============ MAIN READING STATE ============ -->
@@ -450,7 +441,13 @@
   // ---------------------------------------------------------------
   // CONFIG
   // ---------------------------------------------------------------
-  var WBGT_API = "https://api-open.data.gov.sg/v2/real-time/api/wbgt";
+  var WBGT_API = "https://wbgt-proxy.ryhanhusainni.workers.dev";
+  // ^ Replace with your actual Cloudflare Worker URL after deploying
+  //   wbgt-proxy-worker.js (see setup instructions in that file).
+  //   Calling NEA's API directly from the browser no longer works
+  //   reliably now that it requires an API key — browsers can't send
+  //   that key without triggering a CORS preflight NEA doesn't support,
+  //   so this proxy holds the key server-side instead.
   var REFRESH_MS = 15 * 60 * 1000; // matches NEA's own 15-min update cadence
 
   // Thresholds (°C WBGT) for NEA's published low/moderate/high tiers.
@@ -528,28 +525,30 @@
   }
 
   function fetchWBGT(){
-    var headers = { "Accept": "application/json" };
-    var key = getApiKey();
-    if(key) headers["x-api-key"] = key;
+    if(WBGT_API.indexOf("YOUR-SUBDOMAIN") > -1){
+      return Promise.reject(new Error(
+        "The app isn't pointed at your proxy yet. Deploy wbgt-proxy-worker.js to Cloudflare Workers, then replace WBGT_API in this file with your real Worker URL."
+      ));
+    }
 
-    return fetch(WBGT_API, { headers: headers })
+    return fetch(WBGT_API)
       .then(function(res){
         if(!res.ok){
           return res.text().then(function(bodyText){
             var detail = "";
             try {
               var parsed = JSON.parse(bodyText);
-              detail = parsed.errorMsg || parsed.message || parsed.error || "";
+              detail = parsed.errorMsg || parsed.message || parsed.error || parsed.detail || "";
             } catch(e){
               detail = (bodyText || "").slice(0, 200);
             }
-            var msg = "NEA's WBGT service returned HTTP " + res.status + ".";
+            var msg = "The proxy or NEA returned HTTP " + res.status + ".";
             if(res.status === 403){
-              msg = key
-                ? "NEA rejected the request (HTTP 403) even with an API key. " + (detail || "The key may be invalid, or the service may be temporarily restricting access.")
-                : "NEA rejected the request (HTTP 403), most likely because of tightened rate limits on key-less requests. Try adding a free API key in Settings below.";
+              msg = "NEA rejected the request (HTTP 403) even via the proxy. " + (detail || "Double check the DATAGOV_API_KEY secret is set correctly on the Worker.");
             } else if(res.status === 429){
-              msg = "Too many requests right now (HTTP 429) — NEA's rate limit was hit. Wait a few minutes and try again, or add an API key for a higher limit.";
+              msg = "Too many requests right now (HTTP 429) — NEA's rate limit was hit. Wait a few minutes and try again.";
+            } else if(res.status === 502){
+              msg = "The proxy couldn't reach NEA. " + (detail || "Try again shortly.");
             } else if(detail){
               msg += " " + detail;
             }
@@ -557,6 +556,12 @@
           });
         }
         return res.json();
+      })
+      .catch(function(err){
+        if(err instanceof TypeError){
+          throw new Error("Couldn't reach the proxy at all. Check the proxy URL is correct and the Worker is deployed.");
+        }
+        throw err;
       });
   }
 
@@ -767,25 +772,6 @@
   els["btn-locate"].addEventListener("click", run);
   els["btn-retry"].addEventListener("click", run);
   els["btn-refresh"].addEventListener("click", run);
-
-  var btnShowSettings = document.getElementById("btn-show-settings");
-  var settingsBox = document.getElementById("settings-box");
-  var apiKeyInput = document.getElementById("api-key-input");
-  var btnSaveKey = document.getElementById("btn-save-key");
-
-  btnShowSettings.addEventListener("click", function(){
-    settingsBox.classList.toggle("hidden");
-    if(!settingsBox.classList.contains("hidden")){
-      apiKeyInput.value = getApiKey();
-      apiKeyInput.focus();
-    }
-  });
-
-  btnSaveKey.addEventListener("click", function(){
-    try { localStorage.setItem("heatsg_api_key", apiKeyInput.value.trim()); }
-    catch(e){ /* ignore storage failures, e.g. private browsing */ }
-    run();
-  });
 
   // Auto-refresh while the main panel is visible
   setInterval(function(){
