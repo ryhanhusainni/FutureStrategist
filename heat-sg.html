@@ -441,7 +441,7 @@
   // ---------------------------------------------------------------
   // CONFIG
   // ---------------------------------------------------------------
-  var WBGT_API = "https://wbgt-proxy.ryhanhusainni.workers.dev";
+  var WBGT_API = "https://wbgt-proxy.YOUR-SUBDOMAIN.workers.dev";
   // ^ Replace with your actual Cloudflare Worker URL after deploying
   //   wbgt-proxy-worker.js (see setup instructions in that file).
   //   Calling NEA's API directly from the browser no longer works
@@ -565,59 +565,42 @@
       });
   }
 
-  // Walk the response defensively to find station list + readings,
-  // regardless of minor schema differences.
+  // Parsed against the OFFICIAL OpenAPI spec for this endpoint
+  // (confirmed directly from the dataset's downloadable API spec).
+  // Real shape: { data: { records: [ { datetime, item: { readings: [
+  //   { station: {id, name, townCenter}, heatStress, location: {latitude, longtitude}, wbgt }
+  // ] } } ] } }
+  // NOTE: the spec itself spells longitude as "longtitude" (typo in
+  // NEA's own schema) — matched here deliberately, not a mistake.
   function parseStations(json){
     var data = json && json.data ? json.data : json;
-    var stationMeta = data.stationMetadata || data.station_metadata || data.stations || [];
-    var items = data.items || data.readings || [];
-    if(!items.length) throw new Error("No WBGT readings were returned right now.");
+    var records = data.records || [];
+    if(!records.length) throw new Error("No WBGT readings were returned right now.");
 
-    // Use the latest item
-    var latest = items[items.length - 1];
-    var readingMap = {};
+    var latest = records[records.length - 1];
+    var readings = (latest.item && latest.item.readings) || [];
+    if(!readings.length) throw new Error("The latest WBGT record had no station readings.");
 
-    // Two common shapes: readings keyed by station id directly,
-    // or nested under a sub-key like "wbgt".
-    var readingsObj = latest.readings || latest.reading || latest;
-    if(readingsObj.wbgt) readingsObj = readingsObj.wbgt;
-
-    Object.keys(readingsObj).forEach(function(stationId){
-      var entry = readingsObj[stationId];
-      var value = (typeof entry === "object") ? (entry.value !== undefined ? entry.value : entry.wbgt) : entry;
-      var flag = (typeof entry === "object") ? (entry.status || entry.flag || entry.level) : undefined;
-      readingMap[stationId] = { value: Number(value), flag: flag };
-    });
-
-    var stations = stationMeta.map(function(s){
-      var id = s.id || s.stationId || s.station_id || s.deviceId;
-      var loc = s.labelLocation || s.location || s.coordinates || {};
-      var lat = loc.latitude !== undefined ? loc.latitude : (s.latitude || s.lat);
-      var lon = loc.longitude !== undefined ? loc.longitude : (s.longitude || s.lon);
-      var name = s.name || s.label || s.stationName || id;
-      var r = readingMap[id] || {};
-      return { id:id, name:name, lat:Number(lat), lon:Number(lon), value:r.value, flag:r.flag };
+    var stations = readings.map(function(r){
+      var station = r.station || {};
+      var loc = r.location || {};
+      return {
+        id: station.id,
+        name: station.name || station.id || "Unknown station",
+        lat: Number(loc.latitude),
+        lon: Number(loc.longtitude), // sic — matches NEA's actual field name
+        value: Number(r.wbgt),
+        flag: r.heatStress
+      };
     }).filter(function(s){
-      return s.lat && s.lon && !isNaN(s.value);
+      return !isNaN(s.lat) && !isNaN(s.lon) && !isNaN(s.value);
     });
-
-    var timestamp = latest.timestamp || latest.date || latest.updatedTimestamp || null;
 
     if(!stations.length){
-      // Fallback: no usable station metadata with coords — surface
-      // whatever single reading exists so the app still gives a number.
-      var anyId = Object.keys(readingMap)[0];
-      if(anyId){
-        return {
-          stations: [{ id:anyId, name:"Nearest available reading", lat:null, lon:null,
-                        value:readingMap[anyId].value, flag:readingMap[anyId].flag }],
-          timestamp: timestamp,
-          noGeo: true
-        };
-      }
-      throw new Error("Couldn't match WBGT readings to any station location.");
+      throw new Error("Couldn't parse any valid WBGT station readings from the response.");
     }
 
+    var timestamp = latest.updatedTimestamp || latest.datetime || null;
     return { stations: stations, timestamp: timestamp, noGeo:false };
   }
 
