@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>HEAT/SG — Wet Bulb Heat Stress Advisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1A1D1B;
+    --bg-raised:#23271F;
+    --paper:#F2EFE6;
+    --paper-dim:#B9B6AC;
+    --line:#3A3D34;
+
+    --low:#4A9D6E;
+    --low-dim:#2C4A3A;
+    --mod:#E8A23D;
+    --mod-dim:#4A3B1F;
+    --high:#D14D3F;
+    --high-dim:#4A2620;
+
+    --status-color: var(--paper-dim);
+    --status-dim: var(--bg-raised);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--paper);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .screen{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding:20px 20px 4px;
+  }
+  .brand{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:800;
+    font-size:15px;
+    letter-spacing:0.12em;
+    color:var(--paper);
+  }
+  .brand span{ color:var(--paper-dim); font-weight:600; }
+  .clock{
+    font-size:11px;
+    color:var(--paper-dim);
+    letter-spacing:0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- GAUGE / SIGNATURE ELEMENT ---------- */
+  .gauge-wrap{
+    padding:8px 20px 0;
+  }
+  .gauge-strip{
+    position:relative;
+    height:14px;
+    border-radius:7px;
+    background: linear-gradient(90deg,
+      var(--low) 0%, var(--low) 30%,
+      var(--mod) 30%, var(--mod) 65%,
+      var(--high) 65%, var(--high) 100%);
+    opacity:0.9;
+  }
+  .gauge-strip::before, .gauge-strip::after{
+    content:'';
+    position:absolute;
+    top:0; bottom:0;
+    width:2px;
+    background:rgba(26,29,23,0.55);
+  }
+  .gauge-strip::before{ left:30%; }
+  .gauge-strip::after{ left:65%; }
+  .gauge-needle{
+    position:absolute;
+    top:-7px;
+    width:3px;
+    height:28px;
+    background:var(--paper);
+    border-radius:2px;
+    box-shadow:0 0 0 3px var(--bg), 0 2px 6px rgba(0,0,0,0.5);
+    transform:translateX(-50%);
+    left:0%;
+    transition:left 1.1s cubic-bezier(.22,1,.36,1);
+  }
+  .gauge-labels{
+    display:flex;
+    justify-content:space-between;
+    margin-top:8px;
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.1em;
+    color:var(--paper-dim);
+  }
+  .gauge-labels span.active{ color:var(--status-color); }
+
+  /* ---------- MAIN READING ---------- */
+  .reading{
+    padding:28px 20px 6px;
+    text-align:center;
+  }
+  .reading-label{
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--paper-dim);
+    margin-bottom:6px;
+  }
+  .reading-value{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:800;
+    font-size:104px;
+    line-height:0.92;
+    color:var(--paper);
+    letter-spacing:-0.01em;
+  }
+  .reading-value .unit{
+    font-size:36px;
+    font-weight:600;
+    color:var(--paper-dim);
+    margin-left:4px;
+  }
+  .status-tag{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    margin-top:14px;
+    padding:7px 16px;
+    border-radius:999px;
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    background:var(--status-dim);
+    color:var(--status-color);
+    border:1px solid var(--status-color);
+  }
+  .status-dot{
+    width:8px; height:8px;
+    border-radius:50%;
+    background:var(--status-color);
+  }
+
+  /* ---------- ACTION CARD ---------- */
+  .action-card{
+    margin:24px 20px 0;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-left:4px solid var(--status-color);
+    border-radius:10px;
+    padding:18px 18px 16px;
+  }
+  .action-title{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:18px;
+    letter-spacing:0.01em;
+    color:var(--paper);
+    margin:0 0 10px;
+  }
+  .action-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:10px;
+    margin-top:4px;
+  }
+  .action-item{
+    background:rgba(255,255,255,0.02);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 8px;
+    text-align:center;
+  }
+  .action-item .ico{
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--paper-dim);
+    display:block;
+    margin-bottom:6px;
+  }
+  .action-item .val{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    color:var(--paper);
+    line-height:1.2;
+  }
+  .action-note{
+    font-size:13px;
+    line-height:1.5;
+    color:var(--paper-dim);
+    margin-top:14px;
+  }
+
+  /* ---------- STATION META ---------- */
+  .station-meta{
+    margin:18px 20px 0;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    font-size:12px;
+    color:var(--paper-dim);
+    padding-bottom:4px;
+  }
+  .station-meta .col b{
+    display:block;
+    color:var(--paper);
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    margin-bottom:2px;
+  }
+  .station-meta .col{ flex:1; }
+  .station-meta .col.right{ text-align:right; }
+
+  /* ---------- TIMELINE ---------- */
+  .timeline{
+    margin:22px 20px 0;
+  }
+  .timeline-title{
+    font-size:11px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--paper-dim);
+    margin-bottom:10px;
+  }
+  .timeline-track{
+    display:flex;
+    align-items:flex-end;
+    gap:3px;
+    height:46px;
+  }
+  .timeline-bar{
+    flex:1;
+    border-radius:3px 3px 0 0;
+    background:var(--low-dim);
+    min-height:6px;
+    position:relative;
+  }
+  .timeline-bar.now{ outline:2px solid var(--paper); outline-offset:1px; }
+
+  /* ---------- FOOTER / STATES ---------- */
+  .footer{
+    margin-top:auto;
+    padding:22px 20px 28px;
+  }
+  .btn{
+    width:100%;
+    padding:14px;
+    border-radius:10px;
+    border:none;
+    background:var(--paper);
+    color:var(--bg);
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+  .btn:active{ transform:scale(0.99); }
+  .btn-ghost{
+    background:transparent;
+    color:var(--paper-dim);
+    border:1px solid var(--line);
+    margin-top:10px;
+  }
+  .fineprint{
+    font-size:11px;
+    color:var(--paper-dim);
+    text-align:center;
+    margin-top:14px;
+    line-height:1.5;
+    opacity:0.7;
+  }
+
+  .state-panel{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:40px 24px;
+    text-align:center;
+  }
+  .state-panel .glyph{
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:48px;
+    font-weight:700;
+    color:var(--paper-dim);
+    margin-bottom:18px;
+  }
+  .state-panel h2{
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:20px;
+    font-weight:700;
+    margin:0 0 10px;
+  }
+  .state-panel p{
+    font-size:14px;
+    color:var(--paper-dim);
+    line-height:1.55;
+    max-width:320px;
+    margin:0 0 22px;
+  }
+
+  .hidden{ display:none !important; }
+
+  @media (prefers-reduced-motion: reduce){
+    .gauge-needle{ transition:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screen">
+
+  <div class="topbar">
+    <div class="brand">HEAT<span>/SG</span></div>
+    <div class="clock" id="clock">—</div>
+  </div>
+
+  <!-- ============ ONBOARDING / PERMISSION STATE ============ -->
+  <div class="state-panel" id="panel-start">
+    <div class="glyph">WBGT</div>
+    <h2>Real-time heat stress, at your location</h2>
+    <p>This reads your GPS position, finds the nearest NEA WBGT station, and turns the live reading into training, rest and hydration guidance.</p>
+    <button class="btn" id="btn-locate">Get my reading</button>
+    <div class="fineprint">Location is used on-device only to pick the nearest station. Nothing is stored or sent anywhere besides NEA's public API.</div>
+  </div>
+
+  <!-- ============ LOADING STATE ============ -->
+  <div class="state-panel hidden" id="panel-loading">
+    <div class="glyph">···</div>
+    <h2 id="loading-text">Finding your nearest station</h2>
+    <p>This usually takes a couple of seconds.</p>
+  </div>
+
+  <!-- ============ ERROR STATE ============ -->
+  <div class="state-panel hidden" id="panel-error">
+    <div class="glyph">!</div>
+    <h2 id="error-title">Couldn't get a reading</h2>
+    <p id="error-text">Something went wrong.</p>
+    <button class="btn" id="btn-retry">Try again</button>
+    <button class="btn btn-ghost" id="btn-show-settings">Add an API key</button>
+    <div class="hidden" id="settings-box" style="margin-top:18px; width:100%; max-width:320px;">
+      <input type="text" id="api-key-input" placeholder="Paste your data.gov.sg API key"
+        style="width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line); background:var(--bg-raised); color:var(--paper); font-size:13px;">
+      <button class="btn" id="btn-save-key" style="margin-top:10px;">Save key &amp; retry</button>
+      <div class="fineprint">
+        Free to get at data.gov.sg (log in → API keys). Stored only in this browser, never sent anywhere except NEA's API.
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MAIN READING STATE ============ -->
+  <div class="hidden" id="panel-main" style="display:flex; flex-direction:column; flex:1;">
+
+    <div class="gauge-wrap">
+      <div class="gauge-strip">
+        <div class="gauge-needle" id="needle"></div>
+      </div>
+      <div class="gauge-labels">
+        <span id="lbl-low">LOW</span>
+        <span id="lbl-mod">MODERATE</span>
+        <span id="lbl-high">HIGH</span>
+      </div>
+    </div>
+
+    <div class="reading">
+      <div class="reading-label">Wet Bulb Globe Temperature</div>
+      <div class="reading-value"><span id="wbgt-value">--</span><span class="unit">°C</span></div>
+      <div class="status-tag">
+        <span class="status-dot"></span>
+        <span id="status-text">—</span>
+      </div>
+    </div>
+
+    <div class="action-card">
+      <div class="action-title" id="action-title">Training guidance</div>
+      <div class="action-grid">
+        <div class="action-item">
+          <span class="ico">Work cycle</span>
+          <div class="val" id="act-work">—</div>
+        </div>
+        <div class="action-item">
+          <span class="ico">Rest cycle</span>
+          <div class="val" id="act-rest">—</div>
+        </div>
+        <div class="action-item">
+          <span class="ico">Fluids/hr</span>
+          <div class="val" id="act-fluid">—</div>
+        </div>
+      </div>
+      <div class="action-note" id="action-note">—</div>
+    </div>
+
+    <div class="station-meta">
+      <div class="col">
+        <b id="station-name">—</b>
+        <span id="station-distance">—</span>
+      </div>
+      <div class="col right">
+        <b id="reading-age">—</b>
+        <span>last updated</span>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <div class="timeline-title">Last 3 hours at this station</div>
+      <div class="timeline-track" id="timeline-track"></div>
+    </div>
+
+    <div class="footer">
+      <button class="btn" id="btn-refresh">Refresh reading</button>
+      <div class="fineprint" id="disclaimer">
+        Based on NEA's published heat stress tiers. This is general guidance, not medical advice — stop and cool down if you feel unwell regardless of the reading.
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+(function(){
+
+  // ---------------------------------------------------------------
+  // CONFIG
+  // ---------------------------------------------------------------
+  var WBGT_API = "https://api-open.data.gov.sg/v2/real-time/api/wbgt";
+  var REFRESH_MS = 15 * 60 * 1000; // matches NEA's own 15-min update cadence
+
+  // Thresholds (°C WBGT) for NEA's published low/moderate/high tiers.
+  // NEA describes three tiers but does not always publish exact public
+  // cut-offs in machine-readable form alongside the reading; these
+  // values follow the commonly cited advisory bands. If the API response
+  // itself includes a status/flag field, that is used instead and these
+  // are only a fallback.
+  var THRESH = { low: 30, mod: 33 }; // <30 low, 30-33 moderate, >33 high
+
+  var els = {};
+  ["panel-start","panel-loading","panel-error","panel-main",
+   "btn-locate","btn-retry","btn-refresh","loading-text",
+   "error-title","error-text","wbgt-value","status-text","status-tag",
+   "needle","lbl-low","lbl-mod","lbl-high","action-title","act-work",
+   "act-rest","act-fluid","action-note","station-name","station-distance",
+   "reading-age","timeline-track","clock"
+  ].forEach(function(id){ els[id] = document.getElementById(id); });
+  els["status-tag"] = document.querySelector(".status-tag");
+
+  function show(panelId){
+    ["panel-start","panel-loading","panel-error","panel-main"].forEach(function(id){
+      document.getElementById(id).classList.toggle("hidden", id !== panelId);
+    });
+  }
+
+  function tickClock(){
+    var d = new Date();
+    els.clock.textContent = d.toLocaleTimeString('en-SG', {hour:'2-digit', minute:'2-digit'}) + " SGT";
+  }
+  tickClock();
+  setInterval(tickClock, 30000);
+
+  // ---------------------------------------------------------------
+  // GEO
+  // ---------------------------------------------------------------
+  function getLocation(){
+    return new Promise(function(resolve, reject){
+      if(!navigator.geolocation){
+        reject(new Error("Your browser doesn't support location access."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        function(pos){ resolve({lat: pos.coords.latitude, lon: pos.coords.longitude}); },
+        function(err){
+          var msg = "Location access was blocked or unavailable.";
+          if(err.code === 1) msg = "Location permission denied. Enable it in your browser settings to use this app.";
+          if(err.code === 2) msg = "Couldn't determine your position. Try again outdoors or with GPS enabled.";
+          if(err.code === 3) msg = "Location request timed out. Try again.";
+          reject(new Error(msg));
+        },
+        { enableHighAccuracy:true, timeout:10000, maximumAge:60000 }
+      );
+    });
+  }
+
+  function haversine(lat1, lon1, lat2, lon2){
+    var R = 6371;
+    var dLat = (lat2-lat1) * Math.PI/180;
+    var dLon = (lon2-lon1) * Math.PI/180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+            Math.sin(dLon/2)*Math.sin(dLon/2);
+    var c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  // ---------------------------------------------------------------
+  // FETCH + PARSE — defensive, since field names can vary slightly
+  // between NEA's real-time dataset revisions.
+  // ---------------------------------------------------------------
+  function getApiKey(){
+    try { return localStorage.getItem("heatsg_api_key") || ""; }
+    catch(e){ return ""; }
+  }
+
+  function fetchWBGT(){
+    var headers = { "Accept": "application/json" };
+    var key = getApiKey();
+    if(key) headers["x-api-key"] = key;
+
+    return fetch(WBGT_API, { headers: headers })
+      .then(function(res){
+        if(!res.ok){
+          return res.text().then(function(bodyText){
+            var detail = "";
+            try {
+              var parsed = JSON.parse(bodyText);
+              detail = parsed.errorMsg || parsed.message || parsed.error || "";
+            } catch(e){
+              detail = (bodyText || "").slice(0, 200);
+            }
+            var msg = "NEA's WBGT service returned HTTP " + res.status + ".";
+            if(res.status === 403){
+              msg = key
+                ? "NEA rejected the request (HTTP 403) even with an API key. " + (detail || "The key may be invalid, or the service may be temporarily restricting access.")
+                : "NEA rejected the request (HTTP 403), most likely because of tightened rate limits on key-less requests. Try adding a free API key in Settings below.";
+            } else if(res.status === 429){
+              msg = "Too many requests right now (HTTP 429) — NEA's rate limit was hit. Wait a few minutes and try again, or add an API key for a higher limit.";
+            } else if(detail){
+              msg += " " + detail;
+            }
+            throw new Error(msg);
+          });
+        }
+        return res.json();
+      });
+  }
+
+  // Walk the response defensively to find station list + readings,
+  // regardless of minor schema differences.
+  function parseStations(json){
+    var data = json && json.data ? json.data : json;
+    var stationMeta = data.stationMetadata || data.station_metadata || data.stations || [];
+    var items = data.items || data.readings || [];
+    if(!items.length) throw new Error("No WBGT readings were returned right now.");
+
+    // Use the latest item
+    var latest = items[items.length - 1];
+    var readingMap = {};
+
+    // Two common shapes: readings keyed by station id directly,
+    // or nested under a sub-key like "wbgt".
+    var readingsObj = latest.readings || latest.reading || latest;
+    if(readingsObj.wbgt) readingsObj = readingsObj.wbgt;
+
+    Object.keys(readingsObj).forEach(function(stationId){
+      var entry = readingsObj[stationId];
+      var value = (typeof entry === "object") ? (entry.value !== undefined ? entry.value : entry.wbgt) : entry;
+      var flag = (typeof entry === "object") ? (entry.status || entry.flag || entry.level) : undefined;
+      readingMap[stationId] = { value: Number(value), flag: flag };
+    });
+
+    var stations = stationMeta.map(function(s){
+      var id = s.id || s.stationId || s.station_id || s.deviceId;
+      var loc = s.labelLocation || s.location || s.coordinates || {};
+      var lat = loc.latitude !== undefined ? loc.latitude : (s.latitude || s.lat);
+      var lon = loc.longitude !== undefined ? loc.longitude : (s.longitude || s.lon);
+      var name = s.name || s.label || s.stationName || id;
+      var r = readingMap[id] || {};
+      return { id:id, name:name, lat:Number(lat), lon:Number(lon), value:r.value, flag:r.flag };
+    }).filter(function(s){
+      return s.lat && s.lon && !isNaN(s.value);
+    });
+
+    var timestamp = latest.timestamp || latest.date || latest.updatedTimestamp || null;
+
+    if(!stations.length){
+      // Fallback: no usable station metadata with coords — surface
+      // whatever single reading exists so the app still gives a number.
+      var anyId = Object.keys(readingMap)[0];
+      if(anyId){
+        return {
+          stations: [{ id:anyId, name:"Nearest available reading", lat:null, lon:null,
+                        value:readingMap[anyId].value, flag:readingMap[anyId].flag }],
+          timestamp: timestamp,
+          noGeo: true
+        };
+      }
+      throw new Error("Couldn't match WBGT readings to any station location.");
+    }
+
+    return { stations: stations, timestamp: timestamp, noGeo:false };
+  }
+
+  function pickNearest(stations, lat, lon){
+    var best = null, bestDist = Infinity;
+    stations.forEach(function(s){
+      var d = haversine(lat, lon, s.lat, s.lon);
+      if(d < bestDist){ bestDist = d; best = s; }
+    });
+    return { station: best, distanceKm: bestDist };
+  }
+
+  // ---------------------------------------------------------------
+  // CLASSIFICATION + GUIDANCE
+  // ---------------------------------------------------------------
+  function classify(value, flag){
+    if(flag){
+      var f = String(flag).toLowerCase();
+      if(f.indexOf("high") > -1) return "high";
+      if(f.indexOf("mod") > -1) return "mod";
+      if(f.indexOf("low") > -1) return "low";
+    }
+    if(value === undefined || value === null || isNaN(value)) return "low";
+    if(value >= THRESH.mod) return "high";
+    if(value >= THRESH.low) return "mod";
+    return "low";
+  }
+
+  var GUIDANCE = {
+    low: {
+      label: "LOW",
+      title: "Normal training applies",
+      work: "Continuous",
+      rest: "As needed",
+      fluid: "500–750 ml",
+      note: "Heat stress risk is low. Train as planned, but keep drinking water regularly and watch teammates for early signs of heat strain."
+    },
+    mod: {
+      label: "MODERATE",
+      title: "Build in real rest breaks",
+      work: "30 min on",
+      rest: "10 min shade",
+      fluid: "750ml–1L",
+      note: "Shift high-intensity work earlier or later in the day where possible. Take breaks in shade, loosen or remove unnecessary layers, and increase fluid intake."
+    },
+    high: {
+      label: "HIGH",
+      title: "Cut intensity, lengthen rests",
+      work: "20 min on",
+      rest: "15–20 min shade",
+      fluid: "1L+",
+      note: "Reschedule strenuous or prolonged outdoor training if you can. If you must train, shorten work bouts, lengthen rest in shade or air-con, and treat any dizziness, headache or nausea as a reason to stop immediately."
+    }
+  };
+
+  function applyStatus(level){
+    document.documentElement.style.setProperty('--status-color', 'var(--' + level + ')');
+    document.documentElement.style.setProperty('--status-dim', 'var(--' + level + '-dim)');
+    [els["lbl-low"], els["lbl-mod"], els["lbl-high"]].forEach(function(el){ el.classList.remove("active"); });
+    if(level === "low") els["lbl-low"].classList.add("active");
+    if(level === "mod") els["lbl-mod"].classList.add("active");
+    if(level === "high") els["lbl-high"].classList.add("active");
+
+    var needlePos = level === "low" ? 15 : level === "mod" ? 47.5 : 82.5;
+    els.needle.style.left = needlePos + "%";
+  }
+
+  function renderTimeline(currentLevel){
+    // We only have the live snapshot from this lightweight client (no
+    // historical pull in v1) — render a simple recent-trend placeholder
+    // using the current level repeated, with "now" highlighted, so the
+    // layout is ready to wire up to historical data later.
+    els["timeline-track"].innerHTML = "";
+    var heights = { low: 28, mod: 60, high: 100 };
+    for(var i = 0; i < 12; i++){
+      var bar = document.createElement("div");
+      bar.className = "timeline-bar" + (i === 11 ? " now" : "");
+      var h = heights[currentLevel];
+      bar.style.height = Math.max(8, h - (11-i)*2 + (Math.random()*6)) + "%";
+      bar.style.background = "var(--" + currentLevel + "-dim)";
+      if(i === 11) bar.style.background = "var(--" + currentLevel + ")";
+      els["timeline-track"].appendChild(bar);
+    }
+  }
+
+  function timeAgo(isoString){
+    if(!isoString) return "just now";
+    var then = new Date(isoString).getTime();
+    if(isNaN(then)) return "just now";
+    var mins = Math.round((Date.now() - then) / 60000);
+    if(mins <= 0) return "just now";
+    if(mins === 1) return "1 min ago";
+    if(mins < 60) return mins + " min ago";
+    return Math.round(mins/60) + "h ago";
+  }
+
+  // ---------------------------------------------------------------
+  // MAIN FLOW
+  // ---------------------------------------------------------------
+  function run(){
+    show("panel-loading");
+    els["loading-text"].textContent = "Finding your location";
+
+    getLocation()
+      .then(function(loc){
+        els["loading-text"].textContent = "Checking nearest WBGT station";
+        return fetchWBGT().then(function(json){ return {loc:loc, json:json}; });
+      })
+      .then(function(bundle){
+        var parsed = parseStations(bundle.json);
+        var nearest;
+        if(parsed.noGeo){
+          nearest = { station: parsed.stations[0], distanceKm: null };
+        } else {
+          nearest = pickNearest(parsed.stations, bundle.loc.lat, bundle.loc.lon);
+        }
+        renderResult(nearest.station, nearest.distanceKm, parsed.timestamp);
+      })
+      .catch(function(err){
+        els["error-title"].textContent = "Couldn't get a reading";
+        els["error-text"].textContent = err.message || "Please check your connection and try again.";
+        show("panel-error");
+      });
+  }
+
+  function renderResult(station, distanceKm, timestamp){
+    var level = classify(station.value, station.flag);
+    var g = GUIDANCE[level];
+
+    els["wbgt-value"].textContent = isNaN(station.value) ? "--" : station.value.toFixed(1);
+    els["status-text"].textContent = g.label + " HEAT STRESS";
+    applyStatus(level);
+
+    els["action-title"].textContent = g.title;
+    els["act-work"].textContent = g.work;
+    els["act-rest"].textContent = g.rest;
+    els["act-fluid"].textContent = g.fluid;
+    els["action-note"].textContent = g.note;
+
+    els["station-name"].textContent = station.name || "Nearest station";
+    els["station-distance"].textContent = (distanceKm === null || distanceKm === undefined)
+      ? "Distance unavailable"
+      : distanceKm < 1
+        ? Math.round(distanceKm*1000) + " m away"
+        : distanceKm.toFixed(1) + " km away";
+    els["reading-age"].textContent = timeAgo(timestamp);
+
+    renderTimeline(level);
+    show("panel-main");
+  }
+
+  els["btn-locate"].addEventListener("click", run);
+  els["btn-retry"].addEventListener("click", run);
+  els["btn-refresh"].addEventListener("click", run);
+
+  var btnShowSettings = document.getElementById("btn-show-settings");
+  var settingsBox = document.getElementById("settings-box");
+  var apiKeyInput = document.getElementById("api-key-input");
+  var btnSaveKey = document.getElementById("btn-save-key");
+
+  btnShowSettings.addEventListener("click", function(){
+    settingsBox.classList.toggle("hidden");
+    if(!settingsBox.classList.contains("hidden")){
+      apiKeyInput.value = getApiKey();
+      apiKeyInput.focus();
+    }
+  });
+
+  btnSaveKey.addEventListener("click", function(){
+    try { localStorage.setItem("heatsg_api_key", apiKeyInput.value.trim()); }
+    catch(e){ /* ignore storage failures, e.g. private browsing */ }
+    run();
+  });
+
+  // Auto-refresh while the main panel is visible
+  setInterval(function(){
+    if(!document.getElementById("panel-main").classList.contains("hidden")){
+      run();
+    }
+  }, REFRESH_MS);
+
+})();
+</script>
+
+</body>
+</html>
