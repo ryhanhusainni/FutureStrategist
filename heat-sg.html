@@ -441,7 +441,7 @@
   // ---------------------------------------------------------------
   // CONFIG
   // ---------------------------------------------------------------
-  var WBGT_API = "https://wbgt-proxy.ryhanhusainni.workers.dev";
+  var WBGT_API = "https://wbgt-proxy.YOUR-SUBDOMAIN.workers.dev";
   // ^ Replace with your actual Cloudflare Worker URL after deploying
   //   wbgt-proxy-worker.js (see setup instructions in that file).
   //   Calling NEA's API directly from the browser no longer works
@@ -565,13 +565,13 @@
       });
   }
 
-  // Parsed against the OFFICIAL OpenAPI spec for this endpoint
-  // (confirmed directly from the dataset's downloadable API spec).
+  // Parsed against the REAL, CONFIRMED live response (verified by
+  // fetching the actual API directly — not just the spec doc, which
+  // had a typo: "longtitude" instead of "longitude". The live data
+  // spells it correctly.
   // Real shape: { data: { records: [ { datetime, item: { readings: [
-  //   { station: {id, name, townCenter}, heatStress, location: {latitude, longtitude}, wbgt }
+  //   { station: {id, name, townCenter}, heatStress, location: {latitude, longitude}, wbgt }
   // ] } } ] } }
-  // NOTE: the spec itself spells longitude as "longtitude" (typo in
-  // NEA's own schema) — matched here deliberately, not a mistake.
   function parseStations(json){
     var data = json && json.data ? json.data : json;
     var records = data.records || [];
@@ -588,7 +588,7 @@
         id: station.id,
         name: station.name || station.id || "Unknown station",
         lat: Number(loc.latitude),
-        lon: Number(loc.longtitude), // sic — matches NEA's actual field name
+        lon: Number(loc.longitude),
         value: Number(r.wbgt),
         flag: r.heatStress
       };
