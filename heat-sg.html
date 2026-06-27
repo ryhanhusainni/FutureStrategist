@@ -179,6 +179,70 @@
     border-radius:10px;
     padding:18px 18px 16px;
   }
+
+  .org-card{
+    margin:20px 0 0;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-left:4px solid var(--status-color);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .org-toggle{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:none;
+    border:none;
+    padding:16px 18px;
+    cursor:pointer;
+    text-align:left;
+    color:var(--paper);
+  }
+  .org-toggle-text{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+  .org-toggle-title{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.01em;
+  }
+  .org-toggle-sub{
+    font-size:12px;
+    color:var(--paper-dim);
+    line-height:1.4;
+  }
+  .org-toggle-icon{
+    font-size:14px;
+    color:var(--paper-dim);
+    flex-shrink:0;
+    transition:transform 0.25s ease;
+  }
+  .org-toggle[aria-expanded="true"] .org-toggle-icon{
+    transform:rotate(180deg);
+  }
+  .org-body{
+    padding:0 18px 16px;
+  }
+  .org-list{
+    margin:0;
+    padding-left:20px;
+    font-size:13px;
+    line-height:1.6;
+    color:var(--paper-dim);
+  }
+  .org-list li{
+    margin-bottom:8px;
+  }
+  .org-list li:last-child{
+    margin-bottom:0;
+  }
+
   .action-title{
     font-family:'Barlow Condensed',sans-serif;
     font-weight:700;
@@ -453,6 +517,21 @@
 
     <div class="footer">
       <button class="btn" id="btn-refresh">Refresh reading</button>
+
+      <div class="org-card">
+        <button class="org-toggle" id="org-toggle" aria-expanded="false">
+          <span class="org-toggle-text">
+            <span class="org-toggle-title">For facility owners &amp; organisers</span>
+            <span class="org-toggle-sub" id="org-summary">—</span>
+          </span>
+          <span class="org-toggle-icon" id="org-icon">▾</span>
+        </button>
+        <div class="org-body hidden" id="org-body">
+          <ol class="org-list" id="org-list"></ol>
+          <div class="action-source">Source: SportSG Heat Stress Management Plan, Section 8.1 (3-Phase Approach)</div>
+        </div>
+      </div>
+
       <div class="fineprint" id="disclaimer">
         WBGT readings from NEA via data.gov.sg. Work/rest and hydration guidance adapted from SportSG's <em>Heat Stress Management Plan</em> (SHW/02/2023, rev. 24 Apr 2024). This is general guidance, not medical advice — stop and cool down if you feel unwell regardless of the reading.
       </div>
@@ -685,6 +764,44 @@
     }
   };
 
+  // Guidance for Sports Facility Owners and Activity Organisers,
+  // condensed from SportSG's "Heat Stress Management Plan"
+  // (SHW/02/2023, rev. 24 Apr 2024), Section 8.1 — the 3-Phase
+  // Approach table. "summary" shows collapsed; "full" is the
+  // complete numbered list shown on expand.
+  var ORG_GUIDANCE = {
+    low: {
+      summary: "Review risk plan, run pre-activity health checks, remind on hydration.",
+      full: [
+        "Review your risk assessment plan, in particular weather condition, participants' profile, intensity of activity and additional mitigating measures.",
+        "Prior to activity, administer the Get Active Questionnaire (GAQ) and/or equivalent assessments. Communicate to participants on hydration regime, recognition of heat injury symptoms, and proper attire.",
+        "During activity, remind participants on hydration and hydration points (e.g. water coolers provided in public sports facilities)."
+      ]
+    },
+    mod: {
+      summary: "Reduce 11am–4pm outdoor activity, brief on safety, nominate a weather monitor.",
+      full: [
+        "Review your risk assessment plan, in particular weather condition, participants' profile, intensity of activity and additional mitigating measures.",
+        "Consider scheduling events/activities at cooler venues or times of day.",
+        "Reduce intensity and duration of outdoor activities at unsheltered venues between 11am and 4pm where possible, subject to review of the risk assessment plan.",
+        "Prior to activity, administer the GAQ and/or equivalent assessments. Communicate hydration regime, heat injury symptom recognition, and proper attire.",
+        "Conduct a safety briefing on activity day, with emphasis on heat injury prevention measures.",
+        "Nominate a person to monitor weather conditions and take necessary action should there be any risk."
+      ]
+    },
+    high: {
+      summary: "Minimise 11am–4pm outdoor use, communicate publicly, monitor for heat injury.",
+      full: [
+        "Review your risk assessment plan, in particular weather condition, participants' profile, intensity of activity and additional mitigating measures.",
+        "Enhance heat mitigation measures further. Consider minimising activities at unsheltered venues (except swimming pools) between 11am and 4pm.",
+        "Commence public communication about the heat stress condition.",
+        "If participants are already at the venue whilst waiting for transport, advise them to rest under shelter and hydrate.",
+        "Monitor participants for the onset of heat injury symptoms as they have been exposed to abnormally high temperatures.",
+        "Sports Facility Owners may consider closing unsheltered facilities between 11am and 4pm (except swimming pools)."
+      ]
+    }
+  };
+
   function applyStatus(level){
     document.documentElement.style.setProperty('--status-color', 'var(--' + level + ')');
     document.documentElement.style.setProperty('--status-dim', 'var(--' + level + '-dim)');
@@ -770,6 +887,8 @@
     els["act-fluid"].textContent = g.fluid;
     els["action-note"].textContent = g.note;
 
+    renderOrgGuidance(level);
+
     els["station-name"].textContent = station.name || "Nearest station";
     els["station-distance"].textContent = (distanceKm === null || distanceKm === undefined)
       ? "Distance unavailable"
@@ -782,9 +901,29 @@
     show("panel-main");
   }
 
+  function renderOrgGuidance(level){
+    var g = ORG_GUIDANCE[level];
+    document.getElementById("org-summary").textContent = g.summary;
+    var list = document.getElementById("org-list");
+    list.innerHTML = "";
+    g.full.forEach(function(point){
+      var li = document.createElement("li");
+      li.textContent = point;
+      list.appendChild(li);
+    });
+  }
+
   els["btn-locate"].addEventListener("click", run);
   els["btn-retry"].addEventListener("click", run);
   els["btn-refresh"].addEventListener("click", run);
+
+  document.getElementById("org-toggle").addEventListener("click", function(){
+    var body = document.getElementById("org-body");
+    var btn = document.getElementById("org-toggle");
+    var expanded = btn.getAttribute("aria-expanded") === "true";
+    btn.setAttribute("aria-expanded", expanded ? "false" : "true");
+    body.classList.toggle("hidden", expanded);
+  });
 
   // Auto-refresh while the main panel is visible
   setInterval(function(){
