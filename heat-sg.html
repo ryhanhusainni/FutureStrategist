@@ -214,6 +214,14 @@
     margin-top:14px;
   }
 
+  .action-source{
+    font-size:11px;
+    color:var(--paper-dim);
+    opacity:0.65;
+    margin-top:8px;
+    font-style:italic;
+  }
+
   /* ---------- STATION META ---------- */
   .station-meta{
     margin:18px 20px 0;
@@ -401,11 +409,12 @@
           <div class="val" id="act-rest">—</div>
         </div>
         <div class="action-item">
-          <span class="ico">Fluids/hr</span>
+          <span class="ico">Hydration</span>
           <div class="val" id="act-fluid">—</div>
         </div>
       </div>
       <div class="action-note" id="action-note">—</div>
+      <div class="action-source" id="action-source">Source: SportSG Heat Stress Management Plan, Sections 8.1 &amp; 9.2</div>
     </div>
 
     <div class="station-meta">
@@ -427,7 +436,7 @@
     <div class="footer">
       <button class="btn" id="btn-refresh">Refresh reading</button>
       <div class="fineprint" id="disclaimer">
-        Based on NEA's published heat stress tiers. This is general guidance, not medical advice — stop and cool down if you feel unwell regardless of the reading.
+        WBGT readings from NEA via data.gov.sg. Work/rest and hydration guidance adapted from SportSG's <em>Heat Stress Management Plan</em> (SHW/02/2023, rev. 24 Apr 2024). This is general guidance, not medical advice — stop and cool down if you feel unwell regardless of the reading.
       </div>
     </div>
 
@@ -441,7 +450,7 @@
   // ---------------------------------------------------------------
   // CONFIG
   // ---------------------------------------------------------------
-  var WBGT_API = "https://wbgt-proxy.ryhanhusainni.workers.dev";
+  var WBGT_API = "https://wbgt-proxy.YOUR-SUBDOMAIN.workers.dev";
   // ^ Replace with your actual Cloudflare Worker URL after deploying
   //   wbgt-proxy-worker.js (see setup instructions in that file).
   //   Calling NEA's API directly from the browser no longer works
@@ -450,13 +459,16 @@
   //   so this proxy holds the key server-side instead.
   var REFRESH_MS = 15 * 60 * 1000; // matches NEA's own 15-min update cadence
 
-  // Thresholds (°C WBGT) for NEA's published low/moderate/high tiers.
-  // NEA describes three tiers but does not always publish exact public
-  // cut-offs in machine-readable form alongside the reading; these
-  // values follow the commonly cited advisory bands. If the API response
-  // itself includes a status/flag field, that is used instead and these
-  // are only a fallback.
-  var THRESH = { low: 30, mod: 33 }; // <30 low, 30-33 moderate, >33 high
+  // Thresholds (°C WBGT) per Singapore's official sporting-context
+  // guidance: SportSG / Sport Safety Committee, "Heat Stress
+  // Management Plan" (SHW/02/2023, revised 24 April 2024), Section
+  // 3.2 and Section 9.2. These are also the bands shown live if the
+  // API itself returns a heatStress flag — this is only the fallback
+  // for when it doesn't.
+  var THRESH = { low: 31, mod: 33 }; // Low <31, Moderate 31–<33, High ≥33
+
+  // Citation shown in the UI footer so the guidance source is visible.
+  var GUIDANCE_SOURCE = "SportSG Heat Stress Management Plan (SHW/02/2023, rev. 24 Apr 2024), Sections 3.2 & 9.2";
 
   var els = {};
   ["panel-start","panel-loading","panel-error","panel-main",
@@ -629,30 +641,36 @@
     return "low";
   }
 
+  // Guidance text below is drawn directly from SportSG's "Heat Stress
+  // Management Plan" (SHW/02/2023, rev. 24 Apr 2024):
+  //  - work/rest cycle: Section 9.2 "Work/Physical Activity Scheduling"
+  //  - hydration: Section 5.2(h) and the 3-Phase Approach table (8.1)
+  //  - action notes: condensed from the "Heat Stress Health Advisory
+  //    for General Population" table, Section 8.1
   var GUIDANCE = {
     low: {
       label: "LOW",
-      title: "Normal training applies",
-      work: "Continuous",
-      rest: "As needed",
-      fluid: "500–750 ml",
-      note: "Heat stress risk is low. Train as planned, but keep drinking water regularly and watch teammates for early signs of heat strain."
+      title: "Continue with normal activities",
+      work: "45–60 min on",
+      rest: "15 min rest",
+      fluid: "250 ml / 30 min",
+      note: "Hydrate normally and wear appropriate attire. Stay aware of the signs and symptoms of heat-related illness even at low risk."
     },
     mod: {
       label: "MODERATE",
-      title: "Build in real rest breaks",
+      title: "Reduce outdoor activity, take real breaks",
       work: "30 min on",
-      rest: "10 min shade",
-      fluid: "750ml–1L",
-      note: "Shift high-intensity work earlier or later in the day where possible. Take breaks in shade, loosen or remove unnecessary layers, and increase fluid intake."
+      rest: "15 min rest",
+      fluid: "250 ml / 30 min",
+      note: "Take regular breaks indoors or in shade for prolonged outdoor activity. Drink more fluids and wear appropriate attire. Where possible, shift activity outside the 11am–4pm window."
     },
     high: {
       label: "HIGH",
-      title: "Cut intensity, lengthen rests",
-      work: "20 min on",
-      rest: "15–20 min shade",
-      fluid: "1L+",
-      note: "Reschedule strenuous or prolonged outdoor training if you can. If you must train, shorten work bouts, lengthen rest in shade or air-con, and treat any dizziness, headache or nausea as a reason to stop immediately."
+      title: "Minimise outdoor activity, stay in shade",
+      work: "15–30 min on",
+      rest: "30 min rest",
+      fluid: "250 ml / 30 min + ice slurry",
+      note: "Minimise outdoor activity and stay under shade where possible. Take more frequent, longer breaks indoors or in shade. Cool yourself actively during breaks (sponging, pouring water over arms and legs) and drink more fluids."
     }
   };
 
