@@ -253,7 +253,7 @@
   }
   .action-grid{
     display:grid;
-    grid-template-columns:1fr 1fr 1fr;
+    grid-template-columns:1fr 1fr;
     gap:10px;
     margin-top:4px;
   }
@@ -293,6 +293,25 @@
     opacity:0.65;
     margin-top:8px;
     font-style:italic;
+  }
+
+  .at-risk-note{
+    font-size:11px;
+    color:var(--paper-dim);
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px solid var(--line);
+    cursor:pointer;
+    opacity:0.85;
+  }
+  .at-risk-icon{
+    opacity:0.8;
+  }
+  .at-risk-body{
+    font-size:12px;
+    line-height:1.5;
+    color:var(--paper-dim);
+    margin-top:8px;
   }
 
   /* ---------- STATION META ---------- */
@@ -494,9 +513,19 @@
           <span class="ico">Hydration</span>
           <div class="val" id="act-fluid">—</div>
         </div>
+        <div class="action-item">
+          <span class="ico">Attire</span>
+          <div class="val" id="act-attire">—</div>
+        </div>
       </div>
       <div class="action-note" id="action-note">—</div>
-      <div class="action-source" id="action-source">Source: SportSG Heat Stress Management Plan, Sections 8.1 &amp; 9.2</div>
+      <div class="action-source" id="action-source">Sources: NEA Heat Stress Advisory (Jun 2026) &amp; SportSG Heat Stress Management Plan, Sections 8.1 &amp; 9.2</div>
+      <div class="at-risk-note" id="at-risk-toggle">
+        <span class="at-risk-icon">ⓘ</span> Some people face higher risk — tap for details
+      </div>
+      <div class="at-risk-body hidden" id="at-risk-body">
+        Exercise extra caution if you are elderly, a child or infant, pregnant, currently ill or recently recovered, living with a chronic condition, or recently arrived from a cooler climate. Consider lower thresholds and closer monitoring for this guidance.
+      </div>
     </div>
 
     <div class="station-meta">
@@ -737,6 +766,12 @@
   //  - hydration: Section 5.2(h) and the 3-Phase Approach table (8.1)
   //  - action notes: condensed from the "Heat Stress Health Advisory
   //    for General Population" table, Section 8.1
+  // Guidance text below is drawn from two official sources:
+  //  - SportSG "Heat Stress Management Plan" (SHW/02/2023, rev. 24
+  //    Apr 2024): work/rest cycle (Section 9.2), hydration cadence
+  //    (Section 5.2h), and the 3-Phase Approach action notes (8.1)
+  //  - NEA "Manage heat stress when outdoors" advisory (June 2026):
+  //    attire guidance per level, and the at-risk groups note
   var GUIDANCE = {
     low: {
       label: "LOW",
@@ -744,6 +779,7 @@
       work: "45–60 min on",
       rest: "15 min rest",
       fluid: "250 ml / 30 min",
+      attire: "Normal attire",
       note: "Hydrate normally and wear appropriate attire. Stay aware of the signs and symptoms of heat-related illness even at low risk."
     },
     mod: {
@@ -752,6 +788,7 @@
       work: "30 min on",
       rest: "15 min rest",
       fluid: "250 ml / 30 min",
+      attire: "No layering, hat/umbrella",
       note: "Take regular breaks indoors or in shade for prolonged outdoor activity. Drink more fluids and wear appropriate attire. Where possible, shift activity outside the 11am–4pm window."
     },
     high: {
@@ -760,6 +797,7 @@
       work: "15–30 min on",
       rest: "30 min rest",
       fluid: "250 ml / 30 min + ice slurry",
+      attire: "Lightweight, light-coloured",
       note: "Minimise outdoor activity and stay under shade where possible. Take more frequent, longer breaks indoors or in shade. Cool yourself actively during breaks (sponging, pouring water over arms and legs) and drink more fluids."
     }
   };
@@ -885,6 +923,7 @@
     els["act-work"].textContent = g.work;
     els["act-rest"].textContent = g.rest;
     els["act-fluid"].textContent = g.fluid;
+    document.getElementById("act-attire").textContent = g.attire;
     els["action-note"].textContent = g.note;
 
     renderOrgGuidance(level);
@@ -923,6 +962,10 @@
     var expanded = btn.getAttribute("aria-expanded") === "true";
     btn.setAttribute("aria-expanded", expanded ? "false" : "true");
     body.classList.toggle("hidden", expanded);
+  });
+
+  document.getElementById("at-risk-toggle").addEventListener("click", function(){
+    document.getElementById("at-risk-body").classList.toggle("hidden");
   });
 
   // Auto-refresh while the main panel is visible
